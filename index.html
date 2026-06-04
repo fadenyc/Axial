@@ -286,6 +286,94 @@
                   inset 0 0 16px color-mix(in srgb, var(--accent) 5%, transparent);
     }
 
+    /* ── Session summary overlay ────────────────────────── */
+    #summary-overlay {
+      display: none;
+      position: absolute;
+      top: 44px;
+      bottom: 28px;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.97);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+      z-index: 10;
+      --accent: #0ff;
+    }
+
+    #summary-overlay.visible { display: flex; }
+
+    .sum-tag {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+
+    .sum-tag::after {
+      content: '';
+      display: block;
+      width: 180px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0.4;
+      margin: 8px auto 0;
+    }
+
+    .sum-hero {
+      font-size: 100px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      text-shadow: 0 0 40px var(--accent), 0 0 80px color-mix(in srgb, var(--accent) 25%, transparent);
+      letter-spacing: -2px;
+    }
+
+    .sum-unit {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      color: #444;
+      margin-bottom: 16px;
+      margin-top: 4px;
+    }
+
+    .sum-grid {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 14px;
+    }
+
+    .sum-cell {
+      flex: 1;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 6px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .sum-val {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+    }
+
+    .sum-lbl {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      color: #444;
+      text-transform: uppercase;
+      margin-top: 3px;
+    }
+
     /* ── Status bar ─────────────────────────────────────── */
     #status-bar {
       height: 28px;
@@ -420,6 +508,15 @@
 
   </div>
 
+  <!-- Session summary overlay -->
+  <div id="summary-overlay">
+    <div class="sum-tag">SESSION COMPLETE</div>
+    <div class="sum-hero" id="sum-hero">0.00</div>
+    <div class="sum-unit" id="sum-unit">MILES</div>
+    <div class="sum-grid" id="sum-grid"></div>
+    <button class="focusable" id="btn-sum-close">CLOSE</button>
+  </div>
+
   <div id="status-bar">
     <span>← → MODE</span>
     <span>LIVECOACH</span>
@@ -447,7 +544,10 @@ const S = {
   intervalRemain: 0,
   intervalTickId: null,
 
+  summaryVisible: false,
+
   rideActive: false,
+  rideStart: 0,
   rideDist: 0,
   rideTrail: [],
 
@@ -480,6 +580,30 @@ function haversine(la1, lo1, la2, lo2) {
   const a = Math.sin(dLa/2)**2 + Math.cos(la1*r) * Math.cos(la2*r) * Math.sin(dLo/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+// ─── Session summary ─────────────────────────────────────────────────────────
+function showSummary(accent, heroVal, heroUnit, stats, saveKey, saveData) {
+  S.summaryVisible = true;
+  const overlay = $('summary-overlay');
+  overlay.style.setProperty('--accent', accent);
+  $('sum-hero').textContent = heroVal;
+  $('sum-unit').textContent = heroUnit;
+  $('sum-grid').innerHTML = stats.map(([val, lbl]) =>
+    `<div class="sum-cell"><div class="sum-val">${val}</div><div class="sum-lbl">${lbl}</div></div>`
+  ).join('');
+  overlay.classList.add('visible');
+  $('btn-sum-close').classList.add('focused');
+  try { localStorage.setItem(saveKey, JSON.stringify({ date: new Date().toISOString(), ...saveData })); } catch(e) {}
+}
+
+function closeSummary() {
+  S.summaryVisible = false;
+  $('summary-overlay').classList.remove('visible');
+  $('btn-sum-close').classList.remove('focused');
+  refreshFocus();
+}
+
+$('btn-sum-close').addEventListener('click', closeSummary);
 
 // ─── Trail canvas ─────────────────────────────────────────────────────────────
 function sizeCanvas(canvas) {
@@ -607,6 +731,11 @@ function activateFocused() {
 }
 
 document.addEventListener('keydown', e => {
+  if (S.summaryVisible) {
+    if (e.key === 'Enter') closeSummary();
+    e.preventDefault();
+    return;
+  }
   const mi = S.modes.indexOf(S.mode);
   const f = focusables();
   const focused = f[Math.min(S.focusIdx, f.length - 1)];
@@ -717,6 +846,13 @@ $('btn-run').addEventListener('click', () => {
     clearInterval(S.runTickId);
     $('btn-run').textContent = 'START RUN';
     $('run-pace').textContent = '--:--';
+    const elapsedMs = Date.now() - S.runStart;
+    const mpm = S.runDist > 0 ? (elapsedMs / 60000) / S.runDist : 0;
+    const paceStr = mpm > 0 ? `${Math.floor(mpm)}:${String(Math.round((mpm % 1) * 60)).padStart(2,'0')}` : '--:--';
+    showSummary('#0ff', S.runDist.toFixed(2), 'MILES',
+      [[fmt(elapsedMs), 'TIME'], [paceStr, 'AVG PACE']],
+      'lc_last_run', { distance: S.runDist, timeMs: elapsedMs, avgPace: paceStr }
+    );
   }
 });
 
@@ -755,6 +891,7 @@ $('btn-interval').addEventListener('click', () => {
 $('btn-ride').addEventListener('click', () => {
   if (!S.rideActive) {
     S.rideActive = true;
+    S.rideStart = Date.now();
     S.rideDist = 0;
     S.rideTrail = [];
     S.baseAltitude = null;
@@ -766,6 +903,13 @@ $('btn-ride').addEventListener('click', () => {
     S.rideActive = false;
     $('btn-ride').textContent = 'START RIDE';
     $('ride-speed').textContent = '0.0';
+    const elapsedMs = Date.now() - S.rideStart;
+    const avgSpd = elapsedMs > 0 ? S.rideDist / (elapsedMs / 3600000) : 0;
+    const elev = $('ride-elev').textContent;
+    showSummary('#f90', S.rideDist.toFixed(2), 'MILES',
+      [[fmt(elapsedMs), 'TIME'], [avgSpd.toFixed(1), 'AVG MPH'], [elev, 'FT ELEV']],
+      'lc_last_ride', { distance: S.rideDist, timeMs: elapsedMs, avgSpeed: avgSpd }
+    );
   }
 });
 
