@@ -1,0 +1,11 @@
+{
+  "name": "LiveCoach",
+  "short_name": "LiveCoach",
+  "description": "Real-time athletic coaching HUD for Meta Ray-Ban Display",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": []
+}
