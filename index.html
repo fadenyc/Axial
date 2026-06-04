@@ -24,7 +24,7 @@
       user-select: none;
     }
 
-    /* ── Faint grid background ──────────────────────────── */
+    /* ── Grid background ────────────────────────────────── */
     #app {
       width: 600px;
       height: 600px;
@@ -90,7 +90,7 @@
       display: none;
       flex-direction: column;
       flex: 1;
-      padding: 0 20px 0;
+      padding: 10px 20px 0;
       overflow: hidden;
       --accent: #0ff;
     }
@@ -101,7 +101,81 @@
     #screen-ride { --accent: #f90; }
     #screen-gym  { --accent: #c084fc; }
 
-    /* ── Hero metric ────────────────────────────────────── */
+    /* ── Side-by-side row (Run + Ride) ──────────────────── */
+    .main-row {
+      display: flex;
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── GPS Trail canvas ───────────────────────────────── */
+    .trail-canvas {
+      width: 272px;
+      height: 100%;
+      flex-shrink: 0;
+      display: block;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: #000;
+      position: relative;
+    }
+
+    /* ── Hero panel (right side) ────────────────────────── */
+    .hero-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    /* HUD corner brackets */
+    .hero-panel::before,
+    .hero-panel::after,
+    .trail-canvas-wrap::before,
+    .trail-canvas-wrap::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: var(--accent);
+      border-style: solid;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .hero-panel::before { top: 0;  left: 0;  border-width: 1px 0 0 1px; }
+    .hero-panel::after  { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+
+    .hero-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 5px;
+      color: #444;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .hero-value {
+      font-size: 80px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      text-shadow: 0 0 30px var(--accent), 0 0 60px color-mix(in srgb, var(--accent) 25%, transparent);
+      letter-spacing: -2px;
+      text-align: center;
+    }
+
+    .hero-unit {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      color: #444;
+      margin-top: 4px;
+    }
+
+    /* ── Gym hero (centered, larger) ────────────────────── */
     .hero-wrap {
       flex: 1;
       display: flex;
@@ -111,82 +185,34 @@
       position: relative;
     }
 
-    .hero-label {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 5px;
-      color: #444;
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
+    .hero-wrap .hero-value { font-size: 120px; }
 
-    .hero-value {
-      font-size: 120px;
-      font-weight: 700;
-      color: var(--accent);
-      line-height: 1;
-      text-shadow: 0 0 40px var(--accent), 0 0 80px color-mix(in srgb, var(--accent) 30%, transparent);
-      letter-spacing: -2px;
-    }
-
-    .hero-unit {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 4px;
-      color: #444;
-      margin-top: 4px;
-    }
-
-    /* Scan line under hero */
+    .hero-wrap::before,
     .hero-wrap::after {
       content: '';
       position: absolute;
-      bottom: 0;
-      left: -20px;
-      right: -20px;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--accent), transparent);
-      opacity: 0.3;
-    }
-
-    /* ── HUD corner brackets ────────────────────────────── */
-    .bracket {
-      position: relative;
-    }
-
-    .bracket::before,
-    .bracket::after {
-      content: '';
-      position: absolute;
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-color: var(--accent);
       border-style: solid;
-      opacity: 0.5;
+      opacity: 0.4;
     }
-
-    .bracket::before {
-      top: 0; left: 0;
-      border-width: 1px 0 0 1px;
-    }
-
-    .bracket::after {
-      bottom: 0; right: 0;
-      border-width: 0 1px 1px 0;
-    }
+    .hero-wrap::before { top: 0;  left: 0;  border-width: 1px 0 0 1px; }
+    .hero-wrap::after  { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
 
     /* ── Stat strip ─────────────────────────────────────── */
     .stat-strip {
       display: flex;
-      gap: 8px;
-      padding: 10px 0;
+      gap: 6px;
+      padding: 8px 0 6px;
+      flex-shrink: 0;
     }
 
     .stat-cell {
       flex: 1;
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.06);
-      padding: 10px 8px 8px;
+      padding: 8px 6px 6px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -194,7 +220,7 @@
     }
 
     .stat-value {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 700;
       color: #fff;
       line-height: 1;
@@ -209,7 +235,6 @@
       margin-top: 3px;
     }
 
-    /* Heart rate placeholder */
     .stat-cell.hr .stat-value { color: #555; }
     .stat-cell.hr .stat-label { color: #2a2a2a; }
 
@@ -219,19 +244,20 @@
       background: #0f0;
       color: #000;
       text-align: center;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
       letter-spacing: 4px;
-      padding: 5px 0;
-      margin-bottom: 6px;
-      text-shadow: none;
+      padding: 4px 0;
+      margin-bottom: 4px;
+      flex-shrink: 0;
     }
 
     /* ── Controls ───────────────────────────────────────── */
     .ctrl-row {
       display: flex;
       gap: 8px;
-      padding-bottom: 10px;
+      padding-bottom: 8px;
+      flex-shrink: 0;
     }
 
     .focusable {
@@ -241,7 +267,7 @@
       align-items: center;
       justify-content: center;
       font-family: inherit;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 700;
       letter-spacing: 3px;
       color: #333;
@@ -279,7 +305,6 @@
 <body>
 <div id="app">
 
-  <!-- Top bar -->
   <div id="top-bar">
     <span id="gps-dot">GPS --</span>
     <div id="mode-bar">
@@ -293,10 +318,13 @@
   <!-- ── RUN ──────────────────────────────────────────── -->
   <div class="screen" id="screen-run">
 
-    <div class="hero-wrap bracket">
-      <div class="hero-label">PACE</div>
-      <div class="hero-value" id="run-pace">--:--</div>
-      <div class="hero-unit">/ MILE</div>
+    <div class="main-row">
+      <canvas id="run-canvas" class="trail-canvas"></canvas>
+      <div class="hero-panel">
+        <div class="hero-label">PACE</div>
+        <div class="hero-value" id="run-pace">--:--</div>
+        <div class="hero-unit">/ MILE</div>
+      </div>
     </div>
 
     <div id="interval-banner">INTERVAL &nbsp; 0:00</div>
@@ -328,10 +356,13 @@
   <!-- ── RIDE ─────────────────────────────────────────── -->
   <div class="screen" id="screen-ride">
 
-    <div class="hero-wrap bracket">
-      <div class="hero-label">SPEED</div>
-      <div class="hero-value" id="ride-speed">0.0</div>
-      <div class="hero-unit">MPH</div>
+    <div class="main-row">
+      <canvas id="ride-canvas" class="trail-canvas"></canvas>
+      <div class="hero-panel">
+        <div class="hero-label">SPEED</div>
+        <div class="hero-value" id="ride-speed">0.0</div>
+        <div class="hero-unit">MPH</div>
+      </div>
     </div>
 
     <div class="stat-strip">
@@ -358,7 +389,7 @@
   <!-- ── GYM ──────────────────────────────────────────── -->
   <div class="screen" id="screen-gym">
 
-    <div class="hero-wrap bracket">
+    <div class="hero-wrap">
       <div class="hero-label">SET TIMER</div>
       <div class="hero-value" id="gym-timer">0:00</div>
       <div class="hero-unit">&nbsp;</div>
@@ -389,7 +420,6 @@
 
   </div>
 
-  <!-- Status bar -->
   <div id="status-bar">
     <span>← → MODE</span>
     <span>LIVECOACH</span>
@@ -410,6 +440,7 @@ const S = {
   runActive: false,
   runStart: 0,
   runDist: 0,
+  runTrail: [],        // [{lat, lng}]
   runTickId: null,
   intervalActive: false,
   intervalSec: 60,
@@ -418,6 +449,7 @@ const S = {
 
   rideActive: false,
   rideDist: 0,
+  rideTrail: [],
 
   gymSetActive: false,
   gymSetStart: 0,
@@ -449,12 +481,113 @@ function haversine(la1, lo1, la2, lo2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ─── Trail canvas ─────────────────────────────────────────────────────────────
+function sizeCanvas(canvas) {
+  canvas.width  = canvas.offsetWidth  || 272;
+  canvas.height = canvas.offsetHeight || 200;
+}
+
+function drawTrail(canvasId, trail, accent) {
+  const canvas = $(canvasId);
+  if (!canvas) return;
+  if (!canvas.width || canvas.width !== canvas.offsetWidth) sizeCanvas(canvas);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // Faint grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < W; x += 30) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 30) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  if (trail.length < 2) {
+    ctx.fillStyle = '#1e1e1e';
+    ctx.font = `700 11px Rajdhani, monospace`;
+    ctx.textAlign = 'center';
+    ctx.letterSpacing = '3px';
+    ctx.fillText('WAITING FOR GPS', W / 2, H / 2 - 6);
+    ctx.fillText('START TO RECORD', W / 2, H / 2 + 10);
+    return;
+  }
+
+  // Bounding box with padding
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const p of trail) {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+  }
+
+  const pad = 0.18;
+  const dLat = (maxLat - minLat) || 0.0005;
+  const dLng = (maxLng - minLng) || 0.0005;
+  minLat -= dLat * pad; maxLat += dLat * pad;
+  minLng -= dLng * pad; maxLng += dLng * pad;
+
+  function toXY(lat, lng) {
+    return [
+      ((lng - minLng) / (maxLng - minLng)) * (W - 16) + 8,
+      (1 - (lat - minLat) / (maxLat - minLat)) * (H - 16) + 8,
+    ];
+  }
+
+  // Trail line
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = 6;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  const [sx, sy] = toXY(trail[0].lat, trail[0].lng);
+  ctx.moveTo(sx, sy);
+  for (let i = 1; i < trail.length; i++) {
+    const [px, py] = toXY(trail[i].lat, trail[i].lng);
+    ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // Start dot (dim)
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Current position dot (bright + glow)
+  const [ex, ey] = toXY(trail[trail.length - 1].lat, trail[trail.length - 1].lng);
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = accent;
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.arc(ex, ey, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pulse ring
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = accent;
+  ctx.globalAlpha = 0.3;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(ex, ey, 10, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
 // ─── Mode / focus ─────────────────────────────────────────────────────────────
 function setMode(m) {
   S.mode = m;
   S.focusIdx = 0;
   document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === `screen-${m}`));
+  // Size canvases after they become visible
+  if (m === 'run')  { sizeCanvas($('run-canvas'));  drawTrail('run-canvas',  S.runTrail,  '#0ff'); }
+  if (m === 'ride') { sizeCanvas($('ride-canvas')); drawTrail('ride-canvas', S.rideTrail, '#f90'); }
   refreshFocus();
 }
 
@@ -494,18 +627,33 @@ function startGPS() {
 }
 
 function onPos(pos) {
-  const gpsDot = $('gps-dot');
-  gpsDot.textContent = 'GPS ●';
-  gpsDot.classList.add('locked');
+  $('gps-dot').textContent = 'GPS ●';
+  $('gps-dot').classList.add('locked');
 
   const { latitude: la, longitude: lo, speed, altitude } = pos.coords;
 
   if (S.lastCoord) {
     const d = haversine(S.lastCoord[0], S.lastCoord[1], la, lo);
-    if (S.runActive)  { S.runDist  += d; $('run-dist').textContent  = S.runDist.toFixed(2); }
-    if (S.rideActive) { S.rideDist += d; $('ride-dist').textContent = S.rideDist.toFixed(2); }
+    if (S.runActive) {
+      S.runDist += d;
+      $('run-dist').textContent = S.runDist.toFixed(2);
+    }
+    if (S.rideActive) {
+      S.rideDist += d;
+      $('ride-dist').textContent = S.rideDist.toFixed(2);
+    }
   }
   S.lastCoord = [la, lo];
+
+  // Append to active trails
+  if (S.runActive) {
+    S.runTrail.push({ lat: la, lng: lo });
+    drawTrail('run-canvas', S.runTrail, '#0ff');
+  }
+  if (S.rideActive) {
+    S.rideTrail.push({ lat: la, lng: lo });
+    drawTrail('ride-canvas', S.rideTrail, '#f90');
+  }
 
   if (speed != null && speed > 0.3) {
     const mph = speed * 2.23694;
@@ -525,9 +673,8 @@ function onPos(pos) {
 }
 
 function onGPSErr() {
-  const gpsDot = $('gps-dot');
-  gpsDot.textContent = 'GPS ✕';
-  gpsDot.classList.remove('locked');
+  $('gps-dot').textContent = 'GPS ✕';
+  $('gps-dot').classList.remove('locked');
 }
 
 // ─── Run ─────────────────────────────────────────────────────────────────────
@@ -536,8 +683,10 @@ $('btn-run').addEventListener('click', () => {
     S.runActive = true;
     S.runStart = Date.now();
     S.runDist = 0;
+    S.runTrail = [];
     $('run-dist').textContent = '0.00';
     $('btn-run').textContent = 'STOP RUN';
+    drawTrail('run-canvas', S.runTrail, '#0ff');
     S.runTickId = setInterval(() => { $('run-time').textContent = fmt(Date.now() - S.runStart); }, 1000);
   } else {
     S.runActive = false;
@@ -583,10 +732,12 @@ $('btn-ride').addEventListener('click', () => {
   if (!S.rideActive) {
     S.rideActive = true;
     S.rideDist = 0;
+    S.rideTrail = [];
     S.baseAltitude = null;
     $('ride-dist').textContent = '0.00';
     $('ride-elev').textContent = '+0';
     $('btn-ride').textContent = 'STOP RIDE';
+    drawTrail('ride-canvas', S.rideTrail, '#f90');
   } else {
     S.rideActive = false;
     $('btn-ride').textContent = 'START RIDE';
