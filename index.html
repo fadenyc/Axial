@@ -100,6 +100,7 @@
     #screen-run  { --accent: #0ff; }
     #screen-ride { --accent: #f90; }
     #screen-gym  { --accent: #c084fc; }
+    #screen-cfg  { --accent: #aaa; }
 
     /* ── Side-by-side row (Run + Ride) ──────────────────── */
     .main-row {
@@ -286,6 +287,29 @@
                   inset 0 0 16px color-mix(in srgb, var(--accent) 5%, transparent);
     }
 
+    /* ── Coach banner ───────────────────────────────────── */
+    #coach-banner {
+      position: absolute;
+      top: 44px;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, rgba(0,255,255,0.07) 0%, transparent 100%);
+      border-bottom: 1px solid rgba(0,255,255,0.15);
+      color: #0ff;
+      text-align: center;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      padding: 10px 20px 8px;
+      z-index: 6;
+      text-shadow: 0 0 14px #0ff;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.4s, transform 0.4s;
+      pointer-events: none;
+    }
+    #coach-banner.visible { opacity: 1; transform: translateY(0); }
+
     /* ── Session summary overlay ────────────────────────── */
     #summary-overlay {
       display: none;
@@ -399,6 +423,7 @@
       <span class="mode-tab" data-mode="run">RUN</span>
       <span class="mode-tab" data-mode="ride">RIDE</span>
       <span class="mode-tab" data-mode="gym">GYM</span>
+      <span class="mode-tab" data-mode="cfg">CFG</span>
     </div>
     <span id="clock">--:--</span>
   </div>
@@ -512,6 +537,35 @@
 
   </div>
 
+  <!-- Coach banner -->
+  <div id="coach-banner"></div>
+
+  <!-- ── CFG ──────────────────────────────────────────── -->
+  <div class="screen" id="screen-cfg">
+    <div class="hero-wrap">
+      <div class="hero-label">AI COACHING</div>
+      <div class="hero-value" id="cfg-coach-status" style="font-size:72px;">OFF</div>
+      <div class="hero-unit">CLAUDE HAIKU</div>
+    </div>
+    <div class="stat-strip">
+      <div class="stat-cell">
+        <div class="stat-value" id="cfg-api-status">--</div>
+        <div class="stat-label">API</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-value">90s</div>
+        <div class="stat-label">INTERVAL</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-value">TTS</div>
+        <div class="stat-label">VOICE</div>
+      </div>
+    </div>
+    <div class="ctrl-row">
+      <button class="focusable" id="btn-coach-toggle">ENABLE COACHING</button>
+    </div>
+  </div>
+
   <!-- Session summary overlay -->
   <div id="summary-overlay">
     <div class="sum-tag">SESSION COMPLETE</div>
@@ -532,7 +586,9 @@
 // ─── State ───────────────────────────────────────────────────────────────────
 const S = {
   mode: 'run',
-  modes: ['run', 'ride', 'gym'],
+  modes: ['run', 'ride', 'gym', 'cfg'],
+  coachEnabled: false,
+  coachTickId: null,
 
   gpsId: null,
   lastCoord: null,
@@ -612,6 +668,83 @@ function closeSummary() {
 }
 
 $('btn-sum-close').addEventListener('click', closeSummary);
+
+// ─── AI Coach ────────────────────────────────────────────────────────────────
+function updateCoachUI() {
+  const on = S.coachEnabled;
+  $('cfg-coach-status').textContent = on ? 'ON' : 'OFF';
+  $('cfg-coach-status').style.color = on ? '#0f0' : '#444';
+  $('cfg-coach-status').style.textShadow = on ? '0 0 30px #0f0' : 'none';
+  $('btn-coach-toggle').textContent = on ? 'DISABLE COACHING' : 'ENABLE COACHING';
+}
+
+function startCoach() {
+  if (!S.coachEnabled) return;
+  clearInterval(S.coachTickId);
+  setTimeout(fetchCoach, 30000);
+  S.coachTickId = setInterval(fetchCoach, 90000);
+}
+
+function stopCoach() {
+  clearInterval(S.coachTickId);
+  S.coachTickId = null;
+}
+
+async function fetchCoach() {
+  if (!S.coachEnabled) return;
+  let mode, stats;
+  if (S.runActive) {
+    mode = 'Run';
+    stats = {
+      distance: S.runDist.toFixed(2) + ' mi',
+      time: fmt(Date.now() - S.runStart),
+      pace: $('run-pace').textContent + '/mi',
+      cadence: $('run-cadence').textContent + ' SPM',
+    };
+  } else if (S.rideActive) {
+    mode = 'Ride';
+    stats = {
+      distance: S.rideDist.toFixed(2) + ' mi',
+      speed: $('ride-speed').textContent + ' mph',
+      elevation: $('ride-elev').textContent + ' ft',
+    };
+  } else {
+    return;
+  }
+
+  try {
+    $('cfg-api-status').textContent = '...';
+    const r = await fetch('/api/coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, stats }),
+    });
+    const { message } = await r.json();
+    $('cfg-api-status').textContent = 'OK';
+    if (message) showCoachMessage(message);
+  } catch(e) {
+    $('cfg-api-status').textContent = 'ERR';
+  }
+}
+
+function showCoachMessage(msg) {
+  const banner = $('coach-banner');
+  banner.textContent = msg.toUpperCase();
+  banner.classList.add('visible');
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(msg);
+    utt.rate = 1.05;
+    window.speechSynthesis.speak(utt);
+  }
+  setTimeout(() => banner.classList.remove('visible'), 7000);
+}
+
+$('btn-coach-toggle').addEventListener('click', () => {
+  S.coachEnabled = !S.coachEnabled;
+  localStorage.setItem('lc_coach', S.coachEnabled);
+  updateCoachUI();
+});
 
 // ─── Accelerometer cadence ───────────────────────────────────────────────────
 function initAccelerometer() {
@@ -927,10 +1060,12 @@ $('btn-run').addEventListener('click', () => {
     $('btn-run').textContent = 'STOP RUN';
     drawTrail('run-canvas', S.runTrail, '#0ff');
     requestMotionPermission();
+    startCoach();
     S.runTickId = setInterval(() => { $('run-time').textContent = fmt(Date.now() - S.runStart); }, 1000);
   } else {
     S.runActive = false;
     clearInterval(S.runTickId);
+    stopCoach();
     $('btn-run').textContent = 'START RUN';
     $('run-pace').textContent = '--:--';
     const elapsedMs = Date.now() - S.runStart;
@@ -986,8 +1121,10 @@ $('btn-ride').addEventListener('click', () => {
     $('ride-elev').textContent = '+0';
     $('btn-ride').textContent = 'STOP RIDE';
     drawTrail('ride-canvas', S.rideTrail, '#f90');
+    startCoach();
   } else {
     S.rideActive = false;
+    stopCoach();
     $('btn-ride').textContent = 'START RIDE';
     $('ride-speed').textContent = '0.0';
     const elapsedMs = Date.now() - S.rideStart;
@@ -1058,6 +1195,8 @@ setInterval(updateClock, 30000);
 updateClock();
 
 // ─── Init ────────────────────────────────────────────────────────────────────
+S.coachEnabled = localStorage.getItem('lc_coach') === 'true';
+updateCoachUI();
 setMode('run');
 startGPS();
 initAccelerometer();
