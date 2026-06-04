@@ -37,6 +37,9 @@ Examples: "Great pace keep it up", "Quicken your steps cadence is low", "Halfway
     });
 
     const data = await response.json();
+    if (!response.ok) {
+      return res.status(502).json({ error: data.error?.message || JSON.stringify(data) });
+    }
     const message = data.content?.[0]?.text?.trim().replace(/[".]/g, '') || 'Keep going';
     res.json({ message });
   } catch (e) {
