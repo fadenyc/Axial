@@ -426,6 +426,10 @@
         <div class="stat-value" id="run-time">0:00</div>
         <div class="stat-label">TIME</div>
       </div>
+      <div class="stat-cell">
+        <div class="stat-value" id="run-cadence">--</div>
+        <div class="stat-label">SPM</div>
+      </div>
       <div class="stat-cell hr">
         <div class="stat-value">-- BPM</div>
         <div class="stat-label">HR</div>
@@ -551,11 +555,15 @@ const S = {
   rideDist: 0,
   rideTrail: [],
 
+  runCadence: 0,
+  steps: { rising: false, lastTime: 0, times: [] },
+
   gymSetActive: false,
   gymSetStart: 0,
   gymSetTickId: null,
   gymReps: 0,
   gymSets: 0,
+  gymRestDuration: 90,
   gymRestTickId: null,
   gymRestRemain: 0,
 
@@ -605,7 +613,54 @@ function closeSummary() {
 
 $('btn-sum-close').addEventListener('click', closeSummary);
 
+// ─── Accelerometer cadence ───────────────────────────────────────────────────
+function initAccelerometer() {
+  if (!window.DeviceMotionEvent) return;
+  if (typeof DeviceMotionEvent.requestPermission === 'function') return; // deferred to user gesture
+  window.addEventListener('devicemotion', onMotion);
+}
+
+async function requestMotionPermission() {
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const r = await DeviceMotionEvent.requestPermission();
+      if (r === 'granted') window.addEventListener('devicemotion', onMotion);
+    } catch(e) {}
+  }
+}
+
+function onMotion(e) {
+  if (!S.runActive) return;
+  const acc = e.accelerationIncludingGravity;
+  if (!acc) return;
+  const mag = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+  const THRESHOLD = 13, HYSTERESIS = 2, MIN_INTERVAL = 250;
+  const now = Date.now();
+  if (mag > THRESHOLD && !S.steps.rising) {
+    S.steps.rising = true;
+    if (now - S.steps.lastTime > MIN_INTERVAL) {
+      S.steps.lastTime = now;
+      S.steps.times.push(now);
+      if (S.steps.times.length > 12) S.steps.times.shift();
+      if (S.steps.times.length >= 2) {
+        const span = S.steps.times[S.steps.times.length - 1] - S.steps.times[0];
+        const spm = Math.round(((S.steps.times.length - 1) / span) * 60000);
+        $('run-cadence').textContent = spm;
+      }
+    }
+  } else if (mag < THRESHOLD - HYSTERESIS) {
+    S.steps.rising = false;
+  }
+}
+
 // ─── Trail canvas ─────────────────────────────────────────────────────────────
+function bearing(la1, lo1, la2, lo2) {
+  const r = Math.PI / 180;
+  const y = Math.sin((lo2-lo1)*r) * Math.cos(la2*r);
+  const x = Math.cos(la1*r) * Math.sin(la2*r) - Math.sin(la1*r) * Math.cos(la2*r) * Math.cos((lo2-lo1)*r);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
 function sizeCanvas(canvas) {
   canvas.width  = canvas.offsetWidth  || 272;
   canvas.height = canvas.offsetHeight || 200;
@@ -701,6 +756,28 @@ function drawTrail(canvasId, trail, accent) {
   ctx.arc(ex, ey, 10, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
+
+  // Direction arrow from last two points
+  if (trail.length >= 2) {
+    const prev = trail[trail.length - 2], cur = trail[trail.length - 1];
+    const b = bearing(prev.lat, prev.lng, cur.lat, cur.lng) * Math.PI / 180;
+    const L = 16;
+    ctx.save();
+    ctx.translate(ex, ey);
+    ctx.rotate(b);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(0, -(8 + L));
+    ctx.lineTo(-4, -(8 + L - 6));
+    ctx.moveTo(0, -(8 + L));
+    ctx.lineTo(4, -(8 + L - 6));
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 // ─── Mode / focus ─────────────────────────────────────────────────────────────
@@ -740,6 +817,8 @@ document.addEventListener('keydown', e => {
   const f = focusables();
   const focused = f[Math.min(S.focusIdx, f.length - 1)];
   const onInterval = focused && focused.id === 'btn-interval' && !S.intervalActive;
+  const onRest     = focused && focused.id === 'btn-rest'     && S.gymRestRemain === 0;
+  const adjusting  = onInterval || onRest;
 
   switch (e.key) {
     case 'ArrowLeft':  setMode(S.modes[(mi - 1 + 3) % 3]); break;
@@ -748,6 +827,9 @@ document.addEventListener('keydown', e => {
       if (onInterval) {
         S.intervalSec = Math.min(1800, S.intervalSec + 30);
         $('btn-interval').textContent = `INTERVAL  ${fmtSec(S.intervalSec)}`;
+      } else if (onRest) {
+        S.gymRestDuration = Math.min(600, S.gymRestDuration + 15);
+        $('btn-rest').textContent = `REST  ${fmtSec(S.gymRestDuration)}`;
       } else {
         S.focusIdx = Math.max(0, S.focusIdx - 1);
         refreshFocus();
@@ -757,6 +839,9 @@ document.addEventListener('keydown', e => {
       if (onInterval) {
         S.intervalSec = Math.max(30, S.intervalSec - 30);
         $('btn-interval').textContent = `INTERVAL  ${fmtSec(S.intervalSec)}`;
+      } else if (onRest) {
+        S.gymRestDuration = Math.max(15, S.gymRestDuration - 15);
+        $('btn-rest').textContent = `REST  ${fmtSec(S.gymRestDuration)}`;
       } else {
         S.focusIdx = Math.min(focusables().length - 1, S.focusIdx + 1);
         refreshFocus();
@@ -765,8 +850,7 @@ document.addEventListener('keydown', e => {
     case 'Enter': activateFocused(); break;
   }
 
-  // Update status bar hint contextually
-  $('status-bar').children[2].textContent = onInterval ? '↑ ↓ ADJUST' : '↑ ↓ ENTER';
+  $('status-bar').children[2].textContent = adjusting ? '↑ ↓ ADJUST' : '↑ ↓ ENTER';
 
   e.preventDefault();
 });
@@ -837,9 +921,12 @@ $('btn-run').addEventListener('click', () => {
     S.runStart = Date.now();
     S.runDist = 0;
     S.runTrail = [];
+    S.steps = { rising: false, lastTime: 0, times: [] };
     $('run-dist').textContent = '0.00';
+    $('run-cadence').textContent = '--';
     $('btn-run').textContent = 'STOP RUN';
     drawTrail('run-canvas', S.runTrail, '#0ff');
+    requestMotionPermission();
     S.runTickId = setInterval(() => { $('run-time').textContent = fmt(Date.now() - S.runStart); }, 1000);
   } else {
     S.runActive = false;
@@ -945,12 +1032,12 @@ $('btn-rest').addEventListener('click', () => {
     $('gym-reps').textContent = 0;
   }
   clearInterval(S.gymRestTickId);
-  S.gymRestRemain = 90;
+  S.gymRestRemain = S.gymRestDuration;
   function tick() {
     if (S.gymRestRemain <= 0) {
       clearInterval(S.gymRestTickId);
       $('gym-timer').textContent = 'GO!';
-      $('btn-rest').textContent = 'REST 1:30';
+      $('btn-rest').textContent = `REST  ${fmtSec(S.gymRestDuration)}`;
       setTimeout(() => { $('gym-timer').textContent = '0:00'; }, 2500);
       return;
     }
@@ -973,6 +1060,7 @@ updateClock();
 // ─── Init ────────────────────────────────────────────────────────────────────
 setMode('run');
 startGPS();
+initAccelerometer();
 </script>
 </body>
 </html>
