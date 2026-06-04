@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).end();
 
   if (!process.env.ANTHROPIC_API_KEY) {
