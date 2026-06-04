@@ -608,13 +608,37 @@ function activateFocused() {
 
 document.addEventListener('keydown', e => {
   const mi = S.modes.indexOf(S.mode);
+  const f = focusables();
+  const focused = f[Math.min(S.focusIdx, f.length - 1)];
+  const onInterval = focused && focused.id === 'btn-interval' && !S.intervalActive;
+
   switch (e.key) {
     case 'ArrowLeft':  setMode(S.modes[(mi - 1 + 3) % 3]); break;
     case 'ArrowRight': setMode(S.modes[(mi + 1) % 3]);      break;
-    case 'ArrowUp':    S.focusIdx = Math.max(0, S.focusIdx - 1); refreshFocus(); break;
-    case 'ArrowDown':  S.focusIdx = Math.min(focusables().length - 1, S.focusIdx + 1); refreshFocus(); break;
-    case 'Enter':      activateFocused(); break;
+    case 'ArrowUp':
+      if (onInterval) {
+        S.intervalSec = Math.min(1800, S.intervalSec + 30);
+        $('btn-interval').textContent = `INTERVAL  ${fmtSec(S.intervalSec)}`;
+      } else {
+        S.focusIdx = Math.max(0, S.focusIdx - 1);
+        refreshFocus();
+      }
+      break;
+    case 'ArrowDown':
+      if (onInterval) {
+        S.intervalSec = Math.max(30, S.intervalSec - 30);
+        $('btn-interval').textContent = `INTERVAL  ${fmtSec(S.intervalSec)}`;
+      } else {
+        S.focusIdx = Math.min(focusables().length - 1, S.focusIdx + 1);
+        refreshFocus();
+      }
+      break;
+    case 'Enter': activateFocused(); break;
   }
+
+  // Update status bar hint contextually
+  $('status-bar').children[2].textContent = onInterval ? '↑ ↓ ADJUST' : '↑ ↓ ENTER';
+
   e.preventDefault();
 });
 
