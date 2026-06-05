@@ -542,27 +542,42 @@
 
   <!-- ── CFG ──────────────────────────────────────────── -->
   <div class="screen" id="screen-cfg">
-    <div class="hero-wrap">
-      <div class="hero-label">AI COACHING</div>
-      <div class="hero-value" id="cfg-coach-status" style="font-size:72px;">OFF</div>
-      <div class="hero-unit">CLAUDE HAIKU</div>
-    </div>
-    <div class="stat-strip">
+    <div class="stat-strip" style="margin-top:12px;">
+      <div class="stat-cell">
+        <div class="stat-value" id="cfg-coach-status" style="font-size:20px;">OFF</div>
+        <div class="stat-label">COACHING</div>
+      </div>
       <div class="stat-cell">
         <div class="stat-value" id="cfg-api-status">--</div>
         <div class="stat-label">API</div>
       </div>
       <div class="stat-cell">
-        <div class="stat-value">90s</div>
-        <div class="stat-label">INTERVAL</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-value">TTS</div>
-        <div class="stat-label">VOICE</div>
+        <div class="stat-value" id="cfg-ghost-status">NONE</div>
+        <div class="stat-label">GHOST</div>
       </div>
     </div>
+
+    <div class="stat-strip">
+      <div class="stat-cell">
+        <div class="stat-value" id="cfg-ghost-dist">--</div>
+        <div class="stat-label">GHOST MI</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-value" id="cfg-ghost-pace">--:--</div>
+        <div class="stat-label">GHOST PACE</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-value" id="cfg-ghost-pts">--</div>
+        <div class="stat-label">PTS</div>
+      </div>
+    </div>
+
     <div class="ctrl-row">
       <button class="focusable" id="btn-coach-toggle">ENABLE COACHING</button>
+    </div>
+    <div class="ctrl-row">
+      <button class="focusable" id="btn-ghost-mock">LOAD MOCK GHOST</button>
+      <button class="focusable" id="btn-ghost-clear">CLEAR</button>
     </div>
   </div>
 
@@ -605,6 +620,10 @@ const S = {
   intervalTickId: null,
 
   summaryVisible: false,
+
+  ghost: null,      // normalized track [{dLat, dLng, t}]
+  ghostAbs: null,   // absolute track for current session [{lat, lng, t}]
+  ghostCumDist: [], // precomputed cumulative distances
 
   rideActive: false,
   rideStart: 0,
@@ -746,6 +765,124 @@ $('btn-coach-toggle').addEventListener('click', () => {
   updateCoachUI();
 });
 
+// ─── Ghost engine ────────────────────────────────────────────────────────────
+function generateMockGhost() {
+  // 2-mile rectangular loop at 9:30/mile pace, stored as relative coords from (0,0)
+  const PACE_SEC_PER_MILE = 570; // 9:30/mile
+  const STEP_SEC = 5;
+  const STEP_MILES = STEP_SEC / PACE_SEC_PER_MILE;
+  // degrees per mile (approx mid-latitude)
+  const DEG_LAT_PER_MILE = 0.01449;
+  const DEG_LNG_PER_MILE = 0.01810;
+  const STEP_LAT = STEP_MILES * DEG_LAT_PER_MILE;
+  const STEP_LNG = STEP_MILES * DEG_LNG_PER_MILE;
+
+  const segments = [
+    { steps: Math.round(0.5 / STEP_MILES), dLat:  STEP_LAT, dLng: 0          }, // N
+    { steps: Math.round(0.5 / STEP_MILES), dLat: 0,          dLng:  STEP_LNG }, // E
+    { steps: Math.round(1.0 / STEP_MILES), dLat: -STEP_LAT,  dLng: 0          }, // S
+    { steps: Math.round(0.5 / STEP_MILES), dLat: 0,          dLng: -STEP_LNG }, // W
+    { steps: Math.round(0.5 / STEP_MILES), dLat:  STEP_LAT,  dLng: 0          }, // N back
+  ];
+
+  const track = [{ dLat: 0, dLng: 0, t: 0 }];
+  let lat = 0, lng = 0, t = 0;
+  for (const seg of segments) {
+    for (let i = 0; i < seg.steps; i++) {
+      lat += seg.dLat; lng += seg.dLng; t += STEP_SEC;
+      track.push({ dLat: lat, dLng: lng, t });
+    }
+  }
+  return track;
+}
+
+function loadGhost(normalized) {
+  S.ghost = normalized;
+  // Compute info for display
+  let dist = 0;
+  for (let i = 1; i < normalized.length; i++) {
+    dist += haversine(
+      normalized[i-1].dLat, normalized[i-1].dLng,
+      normalized[i].dLat,   normalized[i].dLng
+    );
+  }
+  const totalSec = normalized[normalized.length - 1].t;
+  const ppm = dist > 0 ? totalSec / 60 / dist : 0;
+  const paceStr = ppm > 0 ? `${Math.floor(ppm)}:${String(Math.round((ppm%1)*60)).padStart(2,'0')}` : '--:--';
+
+  $('cfg-ghost-status').textContent = 'READY';
+  $('cfg-ghost-dist').textContent   = dist.toFixed(2);
+  $('cfg-ghost-pace').textContent   = paceStr;
+  $('cfg-ghost-pts').textContent    = normalized.length;
+  $('btn-ghost-mock').textContent   = 'RELOAD MOCK';
+}
+
+function activateGhost(startLat, startLng) {
+  if (!S.ghost) return;
+  S.ghostAbs = S.ghost.map(p => ({
+    lat: startLat + p.dLat,
+    lng: startLng + p.dLng,
+    t: p.t,
+  }));
+  S.ghostCumDist = [0];
+  for (let i = 1; i < S.ghostAbs.length; i++) {
+    const d = haversine(S.ghostAbs[i-1].lat, S.ghostAbs[i-1].lng,
+                        S.ghostAbs[i].lat,   S.ghostAbs[i].lng);
+    S.ghostCumDist.push(S.ghostCumDist[i-1] + d);
+  }
+}
+
+function deactivateGhost() {
+  S.ghostAbs = null;
+  S.ghostCumDist = [];
+}
+
+function ghostPosAt(elapsedSec) {
+  const track = S.ghostAbs;
+  if (!track || track.length === 0) return null;
+  if (elapsedSec <= 0) return track[0];
+  const last = track[track.length - 1];
+  if (elapsedSec >= last.t) return last;
+  let lo = 0, hi = track.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (track[mid].t <= elapsedSec) lo = mid; else hi = mid;
+  }
+  const frac = (elapsedSec - track[lo].t) / (track[hi].t - track[lo].t);
+  return {
+    lat: track[lo].lat + (track[hi].lat - track[lo].lat) * frac,
+    lng: track[lo].lng + (track[hi].lng - track[lo].lng) * frac,
+  };
+}
+
+function ghostDistAt(elapsedSec) {
+  const track = S.ghostAbs, cum = S.ghostCumDist;
+  if (!track || track.length === 0) return 0;
+  if (elapsedSec <= 0) return 0;
+  if (elapsedSec >= track[track.length-1].t) return cum[cum.length-1];
+  let lo = 0, hi = track.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (track[mid].t <= elapsedSec) lo = mid; else hi = mid;
+  }
+  const frac = (elapsedSec - track[lo].t) / (track[hi].t - track[lo].t);
+  return cum[lo] + (cum[hi] - cum[lo]) * frac;
+}
+
+$('btn-ghost-mock').addEventListener('click', () => {
+  loadGhost(generateMockGhost());
+});
+
+$('btn-ghost-clear').addEventListener('click', () => {
+  S.ghost = null;
+  deactivateGhost();
+  $('cfg-ghost-status').textContent = 'NONE';
+  $('cfg-ghost-dist').textContent   = '--';
+  $('cfg-ghost-pace').textContent   = '--:--';
+  $('cfg-ghost-pts').textContent    = '--';
+  $('btn-ghost-mock').textContent   = 'LOAD MOCK GHOST';
+});
+
 // ─── Accelerometer cadence ───────────────────────────────────────────────────
 function initAccelerometer() {
   if (!window.DeviceMotionEvent) return;
@@ -787,6 +924,14 @@ function onMotion(e) {
 }
 
 // ─── Trail canvas ─────────────────────────────────────────────────────────────
+function buildGhostSnap(elapsedSec, currentDist) {
+  if (!S.ghostAbs || S.ghostAbs.length < 2) return null;
+  const pos = ghostPosAt(elapsedSec);
+  const gDist = ghostDistAt(elapsedSec);
+  const trail = S.ghostAbs.filter(p => p.t <= elapsedSec);
+  return { pos, trail, delta: currentDist - gDist };
+}
+
 function bearing(la1, lo1, la2, lo2) {
   const r = Math.PI / 180;
   const y = Math.sin((lo2-lo1)*r) * Math.cos(la2*r);
@@ -799,7 +944,8 @@ function sizeCanvas(canvas) {
   canvas.height = canvas.offsetHeight || 200;
 }
 
-function drawTrail(canvasId, trail, accent) {
+function drawTrail(canvasId, trail, accent, ghostSnap) {
+  // ghostSnap = null | { pos: {lat,lng}, trail: [{lat,lng}], delta: number }
   const canvas = $(canvasId);
   if (!canvas) return;
   if (!canvas.width || canvas.width !== canvas.offsetWidth) sizeCanvas(canvas);
@@ -826,9 +972,11 @@ function drawTrail(canvasId, trail, accent) {
     return;
   }
 
-  // Bounding box with padding
+  // Bounding box with padding — include ghost trail if present
   let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-  for (const p of trail) {
+  const allPoints = [...trail, ...(ghostSnap ? ghostSnap.trail : [])];
+  if (ghostSnap && ghostSnap.pos) allPoints.push(ghostSnap.pos);
+  for (const p of allPoints) {
     if (p.lat < minLat) minLat = p.lat;
     if (p.lat > maxLat) maxLat = p.lat;
     if (p.lng < minLng) minLng = p.lng;
@@ -890,6 +1038,45 @@ function drawTrail(canvasId, trail, accent) {
   ctx.stroke();
   ctx.globalAlpha = 1;
 
+  // Ghost trail + dot + delta badge
+  if (ghostSnap && ghostSnap.trail.length >= 2) {
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    const [gsx, gsy] = toXY(ghostSnap.trail[0].lat, ghostSnap.trail[0].lng);
+    ctx.moveTo(gsx, gsy);
+    for (let i = 1; i < ghostSnap.trail.length; i++) {
+      const [gpx, gpy] = toXY(ghostSnap.trail[i].lat, ghostSnap.trail[i].lng);
+      ctx.lineTo(gpx, gpy);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (ghostSnap && ghostSnap.pos) {
+    const [gx, gy] = toXY(ghostSnap.pos.lat, ghostSnap.pos.lng);
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#fff';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(gx, gy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Delta badge
+    const d = ghostSnap.delta;
+    const ahead = d >= 0;
+    const badge = `${ahead ? '+' : ''}${Math.abs(d).toFixed(2)} ${ahead ? 'AHEAD' : 'BEHIND'}`;
+    const badgeColor = ahead ? '#0f0' : '#f60';
+    ctx.font = '700 11px Rajdhani, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = badgeColor;
+    ctx.shadowColor = badgeColor;
+    ctx.shadowBlur = 6;
+    ctx.fillText(badge, 8, 16);
+    ctx.shadowBlur = 0;
+  }
+
   // Direction arrow from last two points
   if (trail.length >= 2) {
     const prev = trail[trail.length - 2], cur = trail[trail.length - 1];
@@ -920,8 +1107,8 @@ function setMode(m) {
   document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === `screen-${m}`));
   // Size canvases after they become visible
-  if (m === 'run')  { sizeCanvas($('run-canvas'));  drawTrail('run-canvas',  S.runTrail,  '#0ff'); }
-  if (m === 'ride') { sizeCanvas($('ride-canvas')); drawTrail('ride-canvas', S.rideTrail, '#f90'); }
+  if (m === 'run')  { sizeCanvas($('run-canvas'));  drawTrail('run-canvas',  S.runTrail,  '#0ff', S.runActive  ? buildGhostSnap((Date.now()-S.runStart)/1000,  S.runDist)  : null); }
+  if (m === 'ride') { sizeCanvas($('ride-canvas')); drawTrail('ride-canvas', S.rideTrail, '#f90', S.rideActive ? buildGhostSnap((Date.now()-S.rideStart)/1000, S.rideDist) : null); }
   refreshFocus();
 }
 
@@ -1018,11 +1205,11 @@ function onPos(pos) {
   // Append to active trails
   if (S.runActive) {
     S.runTrail.push({ lat: la, lng: lo });
-    drawTrail('run-canvas', S.runTrail, '#0ff');
+    drawTrail('run-canvas', S.runTrail, '#0ff', buildGhostSnap((Date.now()-S.runStart)/1000, S.runDist));
   }
   if (S.rideActive) {
     S.rideTrail.push({ lat: la, lng: lo });
-    drawTrail('ride-canvas', S.rideTrail, '#f90');
+    drawTrail('ride-canvas', S.rideTrail, '#f90', buildGhostSnap((Date.now()-S.rideStart)/1000, S.rideDist));
   }
 
   if (speed != null && speed > 0.3) {
@@ -1058,7 +1245,8 @@ $('btn-run').addEventListener('click', () => {
     $('run-dist').textContent = '0.00';
     $('run-cadence').textContent = '--';
     $('btn-run').textContent = 'STOP RUN';
-    drawTrail('run-canvas', S.runTrail, '#0ff');
+    if (S.lastCoord) activateGhost(S.lastCoord[0], S.lastCoord[1]);
+    drawTrail('run-canvas', S.runTrail, '#0ff', null);
     requestMotionPermission();
     startCoach();
     S.runTickId = setInterval(() => { $('run-time').textContent = fmt(Date.now() - S.runStart); }, 1000);
@@ -1066,6 +1254,7 @@ $('btn-run').addEventListener('click', () => {
     S.runActive = false;
     clearInterval(S.runTickId);
     stopCoach();
+    deactivateGhost();
     $('btn-run').textContent = 'START RUN';
     $('run-pace').textContent = '--:--';
     const elapsedMs = Date.now() - S.runStart;
@@ -1120,11 +1309,13 @@ $('btn-ride').addEventListener('click', () => {
     $('ride-dist').textContent = '0.00';
     $('ride-elev').textContent = '+0';
     $('btn-ride').textContent = 'STOP RIDE';
-    drawTrail('ride-canvas', S.rideTrail, '#f90');
+    if (S.lastCoord) activateGhost(S.lastCoord[0], S.lastCoord[1]);
+    drawTrail('ride-canvas', S.rideTrail, '#f90', null);
     startCoach();
   } else {
     S.rideActive = false;
     stopCoach();
+    deactivateGhost();
     $('btn-ride').textContent = 'START RIDE';
     $('ride-speed').textContent = '0.0';
     const elapsedMs = Date.now() - S.rideStart;
